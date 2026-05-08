@@ -4,6 +4,7 @@ import {
   REDIS_STREAM_CLIENT,
   RedisStreamService,
 } from './redis-stream.service';
+import { ZaloEventIngestorService } from './zalo-event-ingestor.service';
 
 @Module({
   providers: [
@@ -13,7 +14,8 @@ import {
         new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379'),
     },
     RedisStreamService,
+    ZaloEventIngestorService,
   ],
-  exports: [RedisStreamService],
+  exports: [RedisStreamService, ZaloEventIngestorService],
 })
 export class ConnectorModule {}
