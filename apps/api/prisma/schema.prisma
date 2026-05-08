@@ -101,7 +101,7 @@ model User {
   updatedAt               DateTime                 @updatedAt @map("updated_at")
   assignedConversations   ConversationAssignment[] @relation("AssignedTo")
   assignedByConversations ConversationAssignment[] @relation("AssignedBy")
-  outboundMessages        Message[]
+  outboundMessages        Message[]                 @relation("UserOutboundMessages")
   outboundCommands        OutboundCommand[]
   auditLogs               AuditLog[]
 
@@ -150,7 +150,7 @@ model Contact {
   updatedAt      DateTime            @updatedAt @map("updated_at")
   zaloAccount    ZaloAccount         @relation(fields: [zaloAccountId], references: [id])
   participations ThreadParticipant[]
-  sentMessages   Message[]
+  sentMessages   Message[]            @relation("ContactSentMessages")
 
   @@unique([zaloAccountId, zaloUserId])
   @@map("contacts")
@@ -170,9 +170,10 @@ model Thread {
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
   zaloAccount      ZaloAccount              @relation(fields: [zaloAccountId], references: [id])
+  lastMessage      Message?                 @relation("ThreadLastMessage", fields: [lastMessageId], references: [id])
   participants     ThreadParticipant[]
   assignments      ConversationAssignment[]
-  messages         Message[]
+  messages         Message[]                @relation("ThreadMessages")
   outboundCommands OutboundCommand[]
 
   @@unique([zaloAccountId, zaloThreadId, threadType])
@@ -226,9 +227,10 @@ model Message {
   zaloCreatedAt       DateTime?           @map("zalo_created_at")
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
-  thread              Thread              @relation(fields: [threadId], references: [id])
-  senderContact       Contact?            @relation(fields: [senderContactId], references: [id])
-  senderUser          User?               @relation(fields: [senderUserId], references: [id])
+  thread              Thread              @relation("ThreadMessages", fields: [threadId], references: [id])
+  lastMessageForThreads Thread[]          @relation("ThreadLastMessage")
+  senderContact       Contact?            @relation("ContactSentMessages", fields: [senderContactId], references: [id])
+  senderUser          User?               @relation("UserOutboundMessages", fields: [senderUserId], references: [id])
   rawPayloads         MessageRawPayload[]
   receipts            MessageReceipt[]
   reactions           MessageReaction[]
