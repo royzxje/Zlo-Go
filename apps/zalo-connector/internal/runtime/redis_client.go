@@ -9,6 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+var ErrNoStreamEntry = errors.New("no Redis stream entry available")
+
 type RedisClient struct {
 	client *redis.Client
 }
@@ -33,10 +35,13 @@ func (c *RedisClient) ReadOne(ctx context.Context, stream string) (StreamEntry, 
 		Block:   5 * time.Second,
 	}).Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return StreamEntry{}, ErrNoStreamEntry
+		}
 		return StreamEntry{}, err
 	}
 	if len(streams) == 0 || len(streams[0].Messages) == 0 {
-		return StreamEntry{}, errors.New("no Redis stream entry available")
+		return StreamEntry{}, ErrNoStreamEntry
 	}
 
 	message := streams[0].Messages[0]

@@ -56,6 +56,9 @@ func main() {
 	log.Println("zalo connector consuming Redis commands")
 	for {
 		if err := runner.ProcessOne(context.Background()); err != nil {
+			if errors.Is(err, runtime.ErrNoStreamEntry) {
+				continue
+			}
 			log.Printf("zalo connector command processing failed: %v", err)
 			time.Sleep(time.Second)
 		}
