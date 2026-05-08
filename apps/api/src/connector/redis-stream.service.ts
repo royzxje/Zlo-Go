@@ -9,6 +9,8 @@ export interface RedisStreamClient {
     field: string,
     value: string,
   ): Promise<string | null>;
+  xread(...args: unknown[]): Promise<unknown>;
+  xdel(stream: string, id: string): Promise<number>;
   disconnect(): void;
 }
 

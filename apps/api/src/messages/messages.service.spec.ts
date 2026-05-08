@@ -13,7 +13,7 @@ describe('MessagesService', () => {
           return '1746700000000-0';
         }),
     } satisfies Pick<RedisStreamService, 'publish'>;
-    const prisma = {
+    const prisma: Record<string, any> = {
       message: {
         create: jest.fn().mockImplementation(async () => {
           calls.push('message.create');
@@ -25,6 +25,7 @@ describe('MessagesService', () => {
         }),
       },
     };
+    prisma.$transaction = jest.fn(async (callback) => callback(prisma));
     const service = new MessagesService(
       redisStream as unknown as RedisStreamService,
       prisma as unknown as PrismaService,
@@ -82,5 +83,95 @@ describe('MessagesService', () => {
       'outboundCommand.create',
       'redis.publish',
     ]);
+  });
+
+  it('writes message and outbound command in one transaction before publishing', async () => {
+    const calls: string[] = [];
+    const redisStream = {
+      publish: jest.fn().mockImplementation(async () => {
+        calls.push('redis.publish');
+        return '1746700000000-0';
+      }),
+    } satisfies Pick<RedisStreamService, 'publish'>;
+    const prisma: Record<string, any> = {
+      message: {
+        create: jest.fn().mockImplementation(async () => {
+          calls.push('message.create');
+        }),
+        update: jest.fn(),
+      },
+      outboundCommand: {
+        create: jest.fn().mockImplementation(async () => {
+          calls.push('outboundCommand.create');
+        }),
+        update: jest.fn(),
+      },
+    };
+    prisma.$transaction = jest.fn(async (callback) => {
+      calls.push('transaction.start');
+      const result = await callback(prisma);
+      calls.push('transaction.end');
+      return result;
+    });
+    const service = new MessagesService(
+      redisStream as unknown as RedisStreamService,
+      prisma as unknown as PrismaService,
+    );
+
+    await service.queueTextMessage({
+      threadId: 'thread-1',
+      threadType: 'USER',
+      text: 'Hello Zalo',
+      createdByUserId: 'user-1',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([
+      'transaction.start',
+      'message.create',
+      'outboundCommand.create',
+      'transaction.end',
+      'redis.publish',
+    ]);
+  });
+
+  it('marks the message and outbound command failed when Redis publish fails', async () => {
+    const publishError = new Error('redis unavailable');
+    const redisStream = {
+      publish: jest.fn().mockRejectedValue(publishError),
+    } satisfies Pick<RedisStreamService, 'publish'>;
+    const prisma: Record<string, any> = {
+      message: {
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      outboundCommand: {
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    prisma.$transaction = jest.fn(async (callback) => callback(prisma));
+    const service = new MessagesService(
+      redisStream as unknown as RedisStreamService,
+      prisma as unknown as PrismaService,
+    );
+
+    await expect(service.queueTextMessage({
+      threadId: 'thread-1',
+      threadType: 'USER',
+      text: 'Hello Zalo',
+      createdByUserId: 'user-1',
+    })).rejects.toThrow('redis unavailable');
+
+    const messageId = prisma.message.create.mock.calls[0][0].data.id;
+    const commandId = prisma.outboundCommand.create.mock.calls[0][0].data.id;
+    expect(prisma.outboundCommand.update).toHaveBeenCalledWith({
+      where: { id: commandId },
+      data: { status: 'failed', error: 'redis unavailable' },
+    });
+    expect(prisma.message.update).toHaveBeenCalledWith({
+      where: { id: messageId },
+      data: { status: 'failed' },
+    });
   });
 });

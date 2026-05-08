@@ -1,11 +1,18 @@
 import { RedisStreamService } from './redis-stream.service';
 
 describe('RedisStreamService', () => {
+  const createRedis = (overrides: Record<string, unknown> = {}) => ({
+    xadd: jest.fn(),
+    xread: jest.fn(),
+    xdel: jest.fn(),
+    disconnect: jest.fn(),
+    ...overrides,
+  });
+
   it('publishes events to Redis streams', async () => {
-    const redis = {
+    const redis = createRedis({
       xadd: jest.fn().mockResolvedValue('stream-id-1'),
-      disconnect: jest.fn(),
-    };
+    });
     const service = new RedisStreamService(redis);
 
     await expect(
@@ -21,10 +28,9 @@ describe('RedisStreamService', () => {
   });
 
   it('throws when Redis does not return a stream entry id', async () => {
-    const redis = {
+    const redis = createRedis({
       xadd: jest.fn().mockResolvedValue(null),
-      disconnect: jest.fn(),
-    };
+    });
     const service = new RedisStreamService(redis);
 
     await expect(service.publish('zalo.commands', { type: 'x' })).rejects.toThrow(
@@ -33,10 +39,7 @@ describe('RedisStreamService', () => {
   });
 
   it('disconnects Redis on module destroy', async () => {
-    const redis = {
-      xadd: jest.fn(),
-      disconnect: jest.fn(),
-    };
+    const redis = createRedis();
     const service = new RedisStreamService(redis);
 
     await service.onModuleDestroy();

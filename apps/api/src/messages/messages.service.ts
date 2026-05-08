@@ -38,34 +38,51 @@ export class MessagesService {
       text: input.text,
     });
 
-    await this.prisma.message.create({
-      data: {
-        id: messageId,
-        threadId: input.threadId,
-        direction: 'outbound',
-        messageType: 'text',
-        text: input.text,
-        status: 'queued',
-      },
-    });
-
-    await this.prisma.outboundCommand.create({
-      data: {
-        id: commandId,
-        threadId: input.threadId,
-        messageId,
-        commandType: 'command.send_text',
-        payload: {
-          thread_id: input.threadId,
-          thread_type: input.threadType,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.message.create({
+        data: {
+          id: messageId,
+          threadId: input.threadId,
+          direction: 'outbound',
+          messageType: 'text',
           text: input.text,
+          status: 'queued',
         },
-        status: 'queued',
-        createdByUserId: input.createdByUserId,
-      },
+      });
+
+      await tx.outboundCommand.create({
+        data: {
+          id: commandId,
+          threadId: input.threadId,
+          messageId,
+          commandType: 'command.send_text',
+          payload: {
+            thread_id: input.threadId,
+            thread_type: input.threadType,
+            text: input.text,
+          },
+          status: 'queued',
+          createdByUserId: input.createdByUserId,
+        },
+      });
     });
 
-    await this.redisStream.publish(ZALO_COMMANDS_STREAM, command);
+    try {
+      await this.redisStream.publish(ZALO_COMMANDS_STREAM, command);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await this.prisma.outboundCommand.update({
+        where: { id: commandId },
+        data: { status: 'failed', error: errorMessage },
+      });
+      await this.prisma.message.update({
+        where: { id: messageId },
+        data: { status: 'failed' },
+      });
+
+      throw error;
+    }
 
     return { messageId, commandId, status: 'queued' };
   }
