@@ -2,6 +2,21 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Command,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $Command $($Arguments -join ' ')"
+    }
+}
+
 function Invoke-InDirectory {
     param(
         [Parameter(Mandatory = $true)]
@@ -21,22 +36,31 @@ function Invoke-InDirectory {
 }
 
 Invoke-InDirectory $RepoRoot {
-    docker compose config
+    Invoke-NativeCommand docker @("compose", "config")
 }
 
 Invoke-InDirectory (Join-Path $RepoRoot "apps/api") {
-    npm test
-    npm run build
+    Invoke-NativeCommand npm @("test")
+    Invoke-NativeCommand npm @("run", "build")
 }
 
 Invoke-InDirectory (Join-Path $RepoRoot "apps/web") {
-    npm test
-    npm run build
+    Invoke-NativeCommand npm @("test")
+    Invoke-NativeCommand npm @("run", "build")
 }
 
 Invoke-InDirectory (Join-Path $RepoRoot "apps/zalo-connector") {
-    go test ./...
-    go build -o bin/zalo-connector ./cmd/connector
+    Invoke-NativeCommand go @("test", "./...")
+
+    $ConnectorBuildOutput = Join-Path $env:TEMP "zalo-connector-smoke-$PID.exe"
+    try {
+        Invoke-NativeCommand go @("build", "-o", $ConnectorBuildOutput, "./cmd/connector")
+    }
+    finally {
+        if (Test-Path -LiteralPath $ConnectorBuildOutput) {
+            Remove-Item -LiteralPath $ConnectorBuildOutput -Force
+        }
+    }
 }
 
 "Smoke checks passed"
