@@ -19,7 +19,7 @@ export class MediaArchiveService {
 
     return this.prisma.mediaAsset.update({
       where: { id: media.id },
-      data: { archiveStatus: 'archived' },
+      data: { archiveStatus: 'archived', lastError: null },
     });
   }
 }

@@ -55,7 +55,7 @@ describe('MediaArchiveService', () => {
 
     expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
       where: { id: 'media-1' },
-      data: { archiveStatus: 'archived' },
+      data: { archiveStatus: 'archived', lastError: null },
     });
     expect(result).toEqual({
       id: 'media-1',
