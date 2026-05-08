@@ -1,0 +1,16 @@
+.worktrees/
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+.superpowers/
+tmp/
+*.log
+apps/api/generated/
+apps/api/.prisma/
+apps/web/dist/
+apps/zalo-connector/bin/
