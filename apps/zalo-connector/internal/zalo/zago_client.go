@@ -19,7 +19,11 @@ type Config struct {
 }
 
 type ZagoClient struct {
-	api *zago.ZaloAPI
+	sender messageSender
+}
+
+type messageSender interface {
+	SendMessage(zago.Message, string, zago.ThreadType) (any, error)
 }
 
 func NewZagoClient(config Config) (*ZagoClient, error) {
@@ -32,11 +36,11 @@ func NewZagoClient(config Config) (*ZagoClient, error) {
 		return nil, err
 	}
 
-	return &ZagoClient{api: api}, nil
+	return &ZagoClient{sender: api}, nil
 }
 
 func (c *ZagoClient) SendText(ctx context.Context, threadID string, threadType string, text string) (string, error) {
-	if c == nil || c.api == nil {
+	if c == nil || c.sender == nil {
 		return "", errors.New("zago client is not initialized")
 	}
 
@@ -51,12 +55,25 @@ func (c *ZagoClient) SendText(ctx context.Context, threadID string, threadType s
 		return "", err
 	}
 
-	response, err := c.api.SendMessage(zago.Message{Text: text}, threadID, typeValue)
-	if err != nil {
-		return "", err
+	type sendResult struct {
+		response any
+		err      error
 	}
+	resultCh := make(chan sendResult, 1)
+	go func() {
+		response, err := c.sender.SendMessage(zago.Message{Text: text}, threadID, typeValue)
+		resultCh <- sendResult{response: response, err: err}
+	}()
 
-	return messageID(response), nil
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case result := <-resultCh:
+		if result.err != nil {
+			return "", result.err
+		}
+		return extractMessageID(result.response)
+	}
 }
 
 func zagoThreadType(threadType string) (zago.ThreadType, error) {
@@ -70,14 +87,17 @@ func zagoThreadType(threadType string) (zago.ThreadType, error) {
 	}
 }
 
-func messageID(response any) string {
+func extractMessageID(response any) (string, error) {
 	if response == nil {
-		return ""
+		return "", errors.New("zago send response does not include a stable message ID")
 	}
 	if value, ok := lookupMessageID(response); ok {
-		return strings.TrimSpace(fmt.Sprint(value))
+		id := strings.TrimSpace(fmt.Sprint(value))
+		if id != "" && id != "<nil>" {
+			return id, nil
+		}
 	}
-	return strings.TrimSpace(fmt.Sprint(response))
+	return "", errors.New("zago send response does not include a stable message ID")
 }
 
 func lookupMessageID(value any) (any, bool) {
@@ -91,7 +111,7 @@ func lookupMessageID(value any) (any, bool) {
 		return nil, false
 	}
 
-	for _, key := range []string{"msgId", "msgID", "messageId", "messageID", "id"} {
+	for _, key := range []string{"msgId", "msg_id", "messageId", "message_id", "id", "cliMsgId", "cli_msg_id", "clientId", "client_id", "zaloMessageId", "zalo_message_id"} {
 		if found, ok := data[key]; ok {
 			return found, true
 		}
