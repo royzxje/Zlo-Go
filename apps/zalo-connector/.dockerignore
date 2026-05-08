@@ -1,0 +1,11 @@
+.git
+bin/
+*.exe
+coverage/
+coverage.*
+*.cover
+*.out
+*.log
+.env
+.env.*
+!.env.example

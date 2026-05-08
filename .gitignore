@@ -14,3 +14,5 @@ apps/api/generated/
 apps/api/.prisma/
 apps/web/dist/
 apps/zalo-connector/bin/
+apps/zalo-connector/connector.exe
+apps/zalo-connector/*.exe
