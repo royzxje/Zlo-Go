@@ -1,0 +1,339 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  AGENT
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum ZaloAccountStatus {
+  disconnected
+  qr_required
+  connecting
+  listening
+  error
+}
+
+enum ThreadType {
+  USER
+  GROUP
+}
+
+enum ThreadStatus {
+  open
+  archived
+}
+
+enum AssignmentStatus {
+  active
+  released
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageType {
+  text
+  image
+  file
+  sticker
+  system
+  reaction
+  unknown
+}
+
+enum MessageStatus {
+  received
+  queued
+  sending
+  sent
+  delivered
+  seen
+  failed
+  deleted
+}
+
+enum MediaType {
+  image
+  file
+  sticker
+  voice
+  video
+  unknown
+}
+
+enum ArchiveStatus {
+  pending
+  archived
+  failed_retryable
+  failed_permanent
+}
+
+enum CommandStatus {
+  queued
+  processing
+  succeeded
+  failed
+}
+
+model User {
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  passwordHash            String                   @map("password_hash")
+  displayName             String                   @map("display_name")
+  role                    UserRole
+  status                  UserStatus               @default(active)
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  assignedConversations   ConversationAssignment[] @relation("AssignedTo")
+  assignedByConversations ConversationAssignment[] @relation("AssignedBy")
+  outboundMessages        Message[]
+  outboundCommands        OutboundCommand[]
+  auditLogs               AuditLog[]
+
+  @@map("users")
+}
+
+model ZaloAccount {
+  id              String            @id @default(uuid())
+  displayName     String?           @map("display_name")
+  zaloUserId      String?           @map("zalo_user_id")
+  zaloClientId    String?           @map("zalo_client_id")
+  phoneMasked     String?           @map("phone_masked")
+  status          ZaloAccountStatus @default(disconnected)
+  lastConnectedAt DateTime?         @map("last_connected_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  sessions        ZaloSession[]
+  contacts        Contact[]
+  threads         Thread[]
+
+  @@map("zalo_accounts")
+}
+
+model ZaloSession {
+  id            String      @id @default(uuid())
+  zaloAccountId String      @map("zalo_account_id")
+  encryptedData String      @map("encrypted_data")
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  zaloAccount   ZaloAccount @relation(fields: [zaloAccountId], references: [id])
+
+  @@index([zaloAccountId, active])
+  @@map("zalo_sessions")
+}
+
+model Contact {
+  id             String              @id @default(uuid())
+  zaloAccountId  String              @map("zalo_account_id")
+  zaloUserId     String              @map("zalo_user_id")
+  displayName    String?             @map("display_name")
+  avatarUrl      String?             @map("avatar_url")
+  phone          String?
+  rawProfile     Json?               @map("raw_profile")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  zaloAccount    ZaloAccount         @relation(fields: [zaloAccountId], references: [id])
+  participations ThreadParticipant[]
+  sentMessages   Message[]
+
+  @@unique([zaloAccountId, zaloUserId])
+  @@map("contacts")
+}
+
+model Thread {
+  id               String                   @id @default(uuid())
+  zaloAccountId    String                   @map("zalo_account_id")
+  zaloThreadId     String                   @map("zalo_thread_id")
+  threadType       ThreadType               @map("thread_type")
+  displayName      String?                  @map("display_name")
+  avatarUrl        String?                  @map("avatar_url")
+  lastMessageId    String?                  @map("last_message_id")
+  lastMessageAt    DateTime?                @map("last_message_at")
+  unreadCount      Int                      @default(0) @map("unread_count")
+  status           ThreadStatus             @default(open)
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+  zaloAccount      ZaloAccount              @relation(fields: [zaloAccountId], references: [id])
+  participants     ThreadParticipant[]
+  assignments      ConversationAssignment[]
+  messages         Message[]
+  outboundCommands OutboundCommand[]
+
+  @@unique([zaloAccountId, zaloThreadId, threadType])
+  @@index([lastMessageAt])
+  @@map("threads")
+}
+
+model ThreadParticipant {
+  id           String    @id @default(uuid())
+  threadId     String    @map("thread_id")
+  contactId    String    @map("contact_id")
+  roleInThread String?   @map("role_in_thread")
+  joinedAt     DateTime? @map("joined_at")
+  leftAt       DateTime? @map("left_at")
+  thread       Thread    @relation(fields: [threadId], references: [id])
+  contact      Contact   @relation(fields: [contactId], references: [id])
+
+  @@unique([threadId, contactId])
+  @@map("thread_participants")
+}
+
+model ConversationAssignment {
+  id               String           @id @default(uuid())
+  threadId         String           @map("thread_id")
+  assignedToUserId String           @map("assigned_to_user_id")
+  assignedByUserId String           @map("assigned_by_user_id")
+  status           AssignmentStatus @default(active)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  releasedAt       DateTime?        @map("released_at")
+  thread           Thread           @relation(fields: [threadId], references: [id])
+  assignedTo       User             @relation("AssignedTo", fields: [assignedToUserId], references: [id])
+  assignedBy       User             @relation("AssignedBy", fields: [assignedByUserId], references: [id])
+
+  @@index([assignedToUserId, status])
+  @@map("conversation_assignments")
+}
+
+model Message {
+  id                  String              @id @default(uuid())
+  threadId            String              @map("thread_id")
+  zaloMessageId       String?             @map("zalo_message_id")
+  zaloClientMessageId String?             @map("zalo_client_message_id")
+  fallbackKey         String?             @map("fallback_key")
+  senderContactId     String?             @map("sender_contact_id")
+  senderUserId        String?             @map("sender_user_id")
+  direction           MessageDirection
+  messageType         MessageType         @map("message_type")
+  text                String?
+  replyToMessageId    String?             @map("reply_to_message_id")
+  status              MessageStatus
+  zaloCreatedAt       DateTime?           @map("zalo_created_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  thread              Thread              @relation(fields: [threadId], references: [id])
+  senderContact       Contact?            @relation(fields: [senderContactId], references: [id])
+  senderUser          User?               @relation(fields: [senderUserId], references: [id])
+  rawPayloads         MessageRawPayload[]
+  receipts            MessageReceipt[]
+  reactions           MessageReaction[]
+  mediaAssets         MediaAsset[]
+  outboundCommands    OutboundCommand[]
+
+  @@unique([threadId, zaloMessageId])
+  @@unique([threadId, fallbackKey])
+  @@index([threadId, zaloCreatedAt])
+  @@index([threadId, createdAt])
+  @@map("messages")
+}
+
+model MessageRawPayload {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  source    String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  message   Message  @relation(fields: [messageId], references: [id])
+
+  @@map("message_raw_payloads")
+}
+
+model MessageReceipt {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  type      String
+  actorId   String?  @map("actor_id")
+  timestamp DateTime
+  message   Message  @relation(fields: [messageId], references: [id])
+
+  @@index([messageId, type])
+  @@map("message_receipts")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  actorId   String?  @map("actor_id")
+  reaction  String
+  createdAt DateTime @default(now()) @map("created_at")
+  message   Message  @relation(fields: [messageId], references: [id])
+
+  @@map("message_reactions")
+}
+
+model MediaAsset {
+  id            String        @id @default(uuid())
+  messageId     String        @map("message_id")
+  mediaType     MediaType     @map("media_type")
+  sourceUrl     String?       @map("source_url")
+  storageBucket String?       @map("storage_bucket")
+  storageKey    String?       @map("storage_key")
+  fileName      String?       @map("file_name")
+  mimeType      String?       @map("mime_type")
+  sizeBytes     BigInt?       @map("size_bytes")
+  checksum      String?
+  archiveStatus ArchiveStatus @default(pending) @map("archive_status")
+  retryCount    Int           @default(0) @map("retry_count")
+  lastError     String?       @map("last_error")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  message       Message       @relation(fields: [messageId], references: [id])
+
+  @@index([archiveStatus, retryCount])
+  @@map("media_assets")
+}
+
+model OutboundCommand {
+  id              String        @id @default(uuid())
+  threadId        String        @map("thread_id")
+  messageId       String?       @map("message_id")
+  commandType     String        @map("command_type")
+  payload         Json
+  status          CommandStatus @default(queued)
+  error           String?
+  createdByUserId String        @map("created_by_user_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  thread          Thread        @relation(fields: [threadId], references: [id])
+  message         Message?      @relation(fields: [messageId], references: [id])
+  createdBy       User          @relation(fields: [createdByUserId], references: [id])
+
+  @@map("outbound_commands")
+}
+
+model ConnectorEvent {
+  id        String   @id @default(uuid())
+  type      String
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("connector_events")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  action    String
+  target    String?
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
