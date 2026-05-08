@@ -5,6 +5,7 @@ import {
   RedisStreamService,
 } from './redis-stream.service';
 import { ZaloEventIngestorService } from './zalo-event-ingestor.service';
+import { ZaloEventsConsumerService } from './zalo-events-consumer.service';
 
 @Module({
   providers: [
@@ -15,7 +16,8 @@ import { ZaloEventIngestorService } from './zalo-event-ingestor.service';
     },
     RedisStreamService,
     ZaloEventIngestorService,
+    ZaloEventsConsumerService,
   ],
-  exports: [RedisStreamService, ZaloEventIngestorService],
+  exports: [RedisStreamService, ZaloEventIngestorService, ZaloEventsConsumerService],
 })
 export class ConnectorModule {}
