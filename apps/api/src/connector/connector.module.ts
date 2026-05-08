@@ -1,5 +1,19 @@
 import { Module } from '@nestjs/common';
-import { RedisStreamService } from './redis-stream.service';
+import Redis from 'ioredis';
+import {
+  REDIS_STREAM_CLIENT,
+  RedisStreamService,
+} from './redis-stream.service';
 
-@Module({ providers: [RedisStreamService], exports: [RedisStreamService] })
+@Module({
+  providers: [
+    {
+      provide: REDIS_STREAM_CLIENT,
+      useFactory: () =>
+        new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+    },
+    RedisStreamService,
+  ],
+  exports: [RedisStreamService],
+})
 export class ConnectorModule {}

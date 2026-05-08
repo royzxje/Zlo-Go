@@ -1,11 +1,22 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import Redis from 'ioredis';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+
+export const REDIS_STREAM_CLIENT = Symbol('REDIS_STREAM_CLIENT');
+
+export interface RedisStreamClient {
+  xadd(
+    stream: string,
+    id: string,
+    field: string,
+    value: string,
+  ): Promise<string | null>;
+  disconnect(): void;
+}
 
 @Injectable()
 export class RedisStreamService implements OnModuleDestroy {
-  private readonly redis = new Redis(
-    process.env.REDIS_URL ?? 'redis://localhost:6379',
-  );
+  constructor(
+    @Inject(REDIS_STREAM_CLIENT) private readonly redis: RedisStreamClient,
+  ) {}
 
   async publish(stream: string, event: Record<string, unknown>): Promise<string> {
     const entryId = await this.redis.xadd(
