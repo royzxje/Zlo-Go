@@ -1,5 +1,12 @@
 $ErrorActionPreference = "Stop"
 
+$createdEnvFile = $false
+
+if (-not (Test-Path -LiteralPath ".env")) {
+    Copy-Item -LiteralPath ".env.example" -Destination ".env"
+    $createdEnvFile = $true
+}
+
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Invoke-NativeCommand {
@@ -36,31 +43,38 @@ function Invoke-InDirectory {
 }
 
 Invoke-InDirectory $RepoRoot {
-    Invoke-NativeCommand docker @("compose", "config")
-}
-
-Invoke-InDirectory (Join-Path $RepoRoot "apps/api") {
-    Invoke-NativeCommand npm @("test")
-    Invoke-NativeCommand npm @("run", "build")
-}
-
-Invoke-InDirectory (Join-Path $RepoRoot "apps/web") {
-    Invoke-NativeCommand npm @("test")
-    Invoke-NativeCommand npm @("run", "build")
-}
-
-Invoke-InDirectory (Join-Path $RepoRoot "apps/zalo-connector") {
-    Invoke-NativeCommand go @("test", "./...")
-
-    $ConnectorBuildOutput = Join-Path $env:TEMP "zalo-connector-smoke-$PID.exe"
     try {
-        Invoke-NativeCommand go @("build", "-o", $ConnectorBuildOutput, "./cmd/connector")
+        Invoke-NativeCommand docker @("compose", "--env-file", ".env.example", "config")
+
+        Invoke-InDirectory (Join-Path $RepoRoot "apps/api") {
+            Invoke-NativeCommand npm @("test")
+            Invoke-NativeCommand npm @("run", "build")
+        }
+
+        Invoke-InDirectory (Join-Path $RepoRoot "apps/web") {
+            Invoke-NativeCommand npm @("test")
+            Invoke-NativeCommand npm @("run", "build")
+        }
+
+        Invoke-InDirectory (Join-Path $RepoRoot "apps/zalo-connector") {
+            Invoke-NativeCommand go @("test", "./...")
+
+            $ConnectorBuildOutput = Join-Path $env:TEMP "zalo-connector-smoke-$PID.exe"
+            try {
+                Invoke-NativeCommand go @("build", "-o", $ConnectorBuildOutput, "./cmd/connector")
+            }
+            finally {
+                if (Test-Path -LiteralPath $ConnectorBuildOutput) {
+                    Remove-Item -LiteralPath $ConnectorBuildOutput -Force
+                }
+            }
+        }
+
+        "Smoke checks passed"
     }
     finally {
-        if (Test-Path -LiteralPath $ConnectorBuildOutput) {
-            Remove-Item -LiteralPath $ConnectorBuildOutput -Force
+        if ($createdEnvFile -and (Test-Path -LiteralPath ".env")) {
+            Remove-Item -LiteralPath ".env"
         }
     }
 }
-
-"Smoke checks passed"
