@@ -5,11 +5,6 @@ describe('MediaArchiveService', () => {
   it('marks media failed_retryable when source URL is missing', async () => {
     const prisma = {
       mediaAsset: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 'media-1',
-          sourceUrl: null,
-          retryCount: 2,
-        }),
         update: jest.fn().mockResolvedValue({
           id: 'media-1',
           archiveStatus: 'failed_retryable',
@@ -22,7 +17,7 @@ describe('MediaArchiveService', () => {
       prisma as unknown as PrismaService,
     );
 
-    const result = await service.archive('media-1');
+    const result = await service.archive({ id: 'media-1', sourceUrl: null });
 
     expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
       where: { id: 'media-1' },
@@ -37,6 +32,34 @@ describe('MediaArchiveService', () => {
       archiveStatus: 'failed_retryable',
       lastError: 'source_url_missing',
       retryCount: 3,
+    });
+  });
+
+  it('marks media archived when source URL is present', async () => {
+    const prisma = {
+      mediaAsset: {
+        update: jest.fn().mockResolvedValue({
+          id: 'media-1',
+          archiveStatus: 'archived',
+        }),
+      },
+    };
+    const service = new MediaArchiveService(
+      prisma as unknown as PrismaService,
+    );
+
+    const result = await service.archive({
+      id: 'media-1',
+      sourceUrl: 'https://example.com/media.jpg',
+    });
+
+    expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
+      where: { id: 'media-1' },
+      data: { archiveStatus: 'archived' },
+    });
+    expect(result).toEqual({
+      id: 'media-1',
+      archiveStatus: 'archived',
     });
   });
 });

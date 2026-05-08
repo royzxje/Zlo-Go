@@ -5,15 +5,10 @@ import { PrismaService } from '../common/prisma/prisma.service';
 export class MediaArchiveService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async archive(mediaId: string) {
-    const media = await this.prisma.mediaAsset.findUnique({
-      where: { id: mediaId },
-      select: { sourceUrl: true },
-    });
-
-    if (!media?.sourceUrl) {
+  async archive(media: { id: string; sourceUrl: string | null }) {
+    if (!media.sourceUrl) {
       return this.prisma.mediaAsset.update({
-        where: { id: mediaId },
+        where: { id: media.id },
         data: {
           archiveStatus: 'failed_retryable',
           lastError: 'source_url_missing',
@@ -23,7 +18,7 @@ export class MediaArchiveService {
     }
 
     return this.prisma.mediaAsset.update({
-      where: { id: mediaId },
+      where: { id: media.id },
       data: { archiveStatus: 'archived' },
     });
   }
