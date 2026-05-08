@@ -1,9 +1,12 @@
+import './ChatLayout.css';
+
 export function ChatLayout() {
   return (
     <main
+      className="chat-shell"
+      data-testid="chat-shell"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(220px, 320px) 1fr',
         minHeight: '100vh',
         fontFamily: 'Inter, system-ui, sans-serif',
         color: '#0f172a'
